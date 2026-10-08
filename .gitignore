@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+*.log
+.chrome-test/
+headless-dom.txt
+cdp-test.cjs
+cdp-debug.cjs

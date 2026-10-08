@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#081321">
+<meta name="description" content="Khảo sát vị trí giao lộ Phạm Ngũ Lão – Vành đai phía Tây Buôn Ma Thuột, bản đồ 2D vệ tinh và mô phỏng 3D cầu vượt giả định. Không phải dự án chính thức.">
+<title>Phạm Ngũ Lão × Vành đai | Đề xuất cầu vượt 3D</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="./vendor/leaflet.css">
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/addons/"}}</script>
+</head>
+<body>
+<div class="shell">
+<header class="mast">
+  <a class="logo" href="#top" aria-label="Về đầu trang"><span class="logo-mark">⌁</span><span>BUÔN MA THUỘT <small>URBAN LAB / KHẢO SÁT HẠ TẦNG</small></span></a>
+  <div class="mast-right"><span class="pill green"><i></i> KHẢO SÁT 08.10.2026</span><a href="#sources" class="toplink">Nguồn dữ liệu ↗</a></div>
+</header>
+<main id="top">
+<section class="hero">
+  <div class="eyebrow"><span class="dash"></span> ĐỊA ĐIỂM NGHIÊN CỨU · ĐẮK LẮK, VIỆT NAM</div>
+  <h1>Một nút giao.<br><em>Hai cao độ.</em><br>Khả năng mới.</h1>
+  <div class="lead-row"><p>Khám phá giao lộ <b>Phạm Ngũ Lão × đường Vành đai phía Tây / 10/3</b> bằng bản đồ thực, ảnh vệ tinh và mô phỏng cầu vượt 3D tương tác.</p><div class="hero-index"><strong>12.70036°N</strong><span>108.02698°E · VỊ TRÍ ƯỚC TÍNH TỪ OSM</span></div></div>
+  <div class="disclaimer"><span class="disclaimer-icon">!</span><p><b>ĐÂY LÀ PHƯƠNG ÁN Ý TƯỞNG, KHÔNG PHẢI DỰ ÁN ĐÃ PHÊ DUYỆT.</b> Chưa tìm thấy văn bản đầu tư cầu vượt tại giao lộ này. Kích thước, tuyến cầu và phối cảnh chỉ phục vụ hình dung sơ bộ, không phải hồ sơ thiết kế giao thông.</p></div>
+</section>
+<section id="explore" class="explore">
+  <div class="section-top"><div><span class="section-tag">01 / VISUAL EXPLORER</span><h2>Khám phá vị trí</h2></div><div class="toggle" role="tablist" aria-label="Chế độ quan sát"><button id="tab3d" class="active" aria-selected="true">◈ Mô hình 3D</button><button id="tabMap" aria-selected="false">▧ Bản đồ 2D / Vệ tinh</button></div></div>
+  <div class="viewport">
+    <div id="stage3d" class="stage"><canvas id="scene" aria-label="Mô hình cầu vượt tương tác"></canvas><div class="watermark">CONCEPT ONLY <span>·</span> NOT AN APPROVED PROJECT</div><div class="view-controls"><button data-view="iso" title="Phối cảnh">↗ 3D</button><button data-view="top" title="Nhìn từ trên">⊞ TOP</button><button data-view="road" title="Góc nhìn mặt đường">▱ ROAD</button><button id="reset" title="Đặt lại">↺ RESET</button></div><div id="threeErr" class="three-error" hidden>Không tải được WebGL hoặc thư viện 3D. Chọn chế độ bản đồ 2D để xem vị trí thực tế.</div></div>
+    <div id="mapStage" class="stage" hidden><div id="map"></div><div class="map-tools"><button id="street" class="active">Đường phố</button><button id="satellite">Vệ tinh</button><button id="terrain">Địa hình</button></div></div>
+    <div class="viewport-footer"><span><span class="live-dot"></span><span id="modeNote">MÔ HÌNH ĐANG HIỂN THỊ: CẦU VƯỢT GIẢ ĐỊNH</span></span><span id="coordinates">12.70036, 108.02698</span></div>
+  </div>
+  <div class="controls"><div class="control-title"><span>THIẾT KẾ THỬ NGHIỆM</span><small>Chỉnh tham số rồi quan sát trực tiếp</small></div>
+    <div class="control-field"><label for="elev">Cao độ mặt cầu <output id="elevValue">7.0 m</output></label><input id="elev" type="range" min="5.5" max="11" step="0.5" value="7"><small>Tham số giả định, không dùng cho thi công</small></div>
+    <div class="control-field"><label for="span">Chiều dài đoạn trên cao <output id="spanValue">160 m</output></label><input id="span" type="range" min="110" max="220" step="10" value="160"></div>
+    <div class="control-field"><label for="lanes">Mặt cắt cầu</label><select id="lanes"><option value="2">2 làn xe</option><option value="4">4 làn xe</option></select></div>
+    <div class="control-field"><label class="switch-row"><span>Hiển thị cầu vượt</span><input type="checkbox" id="showBridge" checked><span class="switch"></span></label><label class="switch-row"><span>Chạy xe mô phỏng</span><input type="checkbox" id="traffic" checked><span class="switch"></span></label></div>
+    <div class="control-field"><label class="switch-row"><span>Chế độ ban đêm</span><input type="checkbox" id="night"><span class="switch"></span></label><button id="snapshot" class="download">↓ Chụp phối cảnh PNG</button></div>
+  </div>
+  <p class="hint">Di chuột / chạm kéo để xoay · cuộn / chụm ngón tay để zoom · nhấn nút góc nhìn để đổi camera. Đường, hướng cầu và cảnh quan trong mô hình là biểu diễn ý tưởng, không tái dựng địa hình khảo sát.</p>
+</section>
+<section class="facts"><div class="section-top"><div><span class="section-tag">02 / FACT CHECK</span><h2>Đã xác minh điều gì?</h2></div></div><div class="fact-grid">
+<article class="fact"><span class="num">01 / HIỆN TRẠNG</span><h3>Nút giao có đèn tín hiệu</h3><p>Giao lộ được báo chí gọi là vòng xoay Phạm Ngũ Lão, nơi Phạm Ngũ Lão giao với đường tránh phía Tây / 10/3 và Tỉnh lộ 5.</p><a href="https://tuoitre.vn/nld/thoi-su/on-lanh-voi-cung-duong-tu-than-o-buon-ma-thuot-20210513112118266.htm" target="_blank" rel="noopener">Báo Người Lao Động ↗</a></article>
+<article class="fact"><span class="num">02 / AN TOÀN</span><h3>Từng xảy ra tai nạn nghiêm trọng</h3><p>Báo Đắk Lắk năm 2022 ghi nhận nguy cơ tại vòng xoay. Tháng 01/2026, báo chí tiếp tục đưa tin vụ xe tải gây tai nạn liên hoàn tại đây.</p><a href="https://baodaklak.vn/phap-luat/202203/kiem-giam-tai-nan-giao-thong-tren-duong-vanh-dai-phia-tay-tp-buon-ma-thuot-xu-ly-nhung-diem-den-ac645ab/" target="_blank" rel="noopener">Báo Đắk Lắk ↗</a></article>
+<article class="fact"><span class="num">03 / DỰ ÁN CẦU VƯỢT</span><h3>Chưa có xác nhận chính thức</h3><p>Chưa tìm thấy quyết định phê duyệt xây dựng cầu vượt riêng tại nút giao này trong các tài liệu nguồn đã đối chiếu. Không được diễn giải mô hình này là dự án sắp khởi công.</p><a href="https://daklak.gov.vn/" target="_blank" rel="noopener">Cổng thông tin tỉnh ↗</a></article>
+</div></section>
+<section class="mapdetail"><div class="section-top"><div><span class="section-tag">03 / GEOSPATIAL REFERENCE</span><h2>Bản đồ & hành chính</h2></div></div><div class="detailgrid"><div class="detailcopy"><h3>Vị trí tham chiếu</h3><p>Tâm nút giao ước tính ở khoảng <b>12.70036°B, 108.02698°Đ</b>, suy ra từ đoạn ngắt giữa hai phần đường Phạm Ngũ Lão trong dữ liệu OpenStreetMap. Đây là tọa độ tham khảo, chưa kiểm tra GNSS tại thực địa.</p><p>Khu vực trước đây thuộc <b>xã Cư Êbur, TP Buôn Ma Thuột</b>. Theo thông tin sắp xếp đơn vị hành chính sau 2025, Cư Êbur được sáp nhập vào <b>phường Buôn Ma Thuột, tỉnh Đắk Lắk</b>. Không diễn giải ranh giới phường theo một điểm tọa độ duy nhất.</p><div class="external"><a target="_blank" rel="noopener" href="https://www.google.com/maps?q=12.70036,108.02698">↗ Google Maps</a><a target="_blank" rel="noopener" href="https://earth.google.com/web/search/12.70036,108.02698">↗ Google Earth 3D</a><a target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=12.70036&mlon=108.02698#map=18/12.70036/108.02698">↗ OpenStreetMap</a></div></div><aside class="statlist"><div><span>TỌA ĐỘ THAM CHIẾU</span><strong>12.70036 / 108.02698</strong></div><div><span>HỆ THAM CHIẾU</span><strong>WGS84 · EPSG:4326</strong></div><div><span>KHU VỰC HÀNH CHÍNH</span><strong>Phường Buôn Ma Thuột, Đắk Lắk</strong></div><div><span>ĐỘ CHÍNH XÁC</span><strong>Ước lượng theo tuyến đường OSM</strong></div></aside></div></section>
+<section class="gallery" id="gallery"><div class="section-top"><div><span class="section-tag">04 / ARCHITECTURAL VISUALIZATION</span><h2>Phối cảnh cầu vượt</h2></div><span class="gallery-note">MINH HỌA Ý TƯỞNG · KHÔNG PHẢI ẢNH DỰ ÁN THỰC TẾ</span></div><div id="galleryGrid" class="gallery-grid"><div class="placeholder"><span>01</span><b>Phối cảnh trên cao</b><small>Hình ảnh mô phỏng phương án đề xuất</small></div><div class="placeholder"><span>02</span><b>Hướng nhìn nút giao</b><small>Không phải phương án được phê duyệt</small></div><div class="placeholder"><span>03</span><b>Góc nhìn từ trên xuống</b><small>Ảnh ý tưởng tham khảo</small></div></div></section>
+<section class="sources" id="sources"><span class="section-tag">05 / SOURCES & METHODS</span><h2>Nguồn, phương pháp, giới hạn</h2><div class="source-columns"><div><h3>Nguồn kiểm tra</h3><ol><li><a href="https://tuoitre.vn/nld/thoi-su/on-lanh-voi-cung-duong-tu-than-o-buon-ma-thuot-20210513112118266.htm" target="_blank" rel="noopener">Người Lao Động (2021): hiện trạng đèn đỏ, tai nạn</a></li><li><a href="https://baodaklak.vn/phap-luat/202203/kiem-giam-tai-nan-giao-thong-tren-duong-vanh-dai-phia-tay-tp-buon-ma-thuot-xu-ly-nhung-diem-den-ac645ab/" target="_blank" rel="noopener">Báo Đắk Lắk (2022): điểm đen giao thông</a></li><li><a href="https://tuoitre.vn/video/o-to-tai-tong-2-xe-dung-den-do-lam-chet-3-con-bo-gay-mot-tru-den-moi-dung-lai-193379.htm" target="_blank" rel="noopener">Tuổi Trẻ (2026): vụ tai nạn tháng 01/2026</a></li><li><a href="https://buonmathuot.daklak.gov.vn/thu-tuong-chinh-phu-phe-duyet-quyet-dinh-dieu-chinh-quy-hoach-chung-thanh-pho-buon-ma-thuot-den-2025-1094.html" target="_blank" rel="noopener">Quy hoạch chung Buôn Ma Thuột (tham khảo)</a></li><li><a href="https://tinhthanhvn.com/bando/dak-lak/buon-ma-thuot" target="_blank" rel="noopener">Thông tin sắp xếp hành chính, đối chiếu nguồn thứ cấp</a></li><li><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap / ODbL · dữ liệu vị trí, tuyến đường</a></li></ol></div><div><h3>Phạm vi mô hình</h3><p>Không có bình đồ khảo sát, cao độ đo đạc, hồ sơ địa chất, quy hoạch tỷ lệ 1/500, lưu lượng xe, các tiêu chuẩn thiết kế áp dụng và văn bản chấp thuận đầu tư. Vì vậy không thể kết luận tính khả thi kỹ thuật, phương án tuyến hoặc mức đầu tư.</p><p>Bản đồ vệ tinh cung cấp bởi Esri/đối tác ở chế độ trực tuyến; bản đồ đường phố OpenStreetMap. Ranh giới hành chính không được vẽ nếu thiếu polygon đối chiếu chuẩn.</p></div></div></section>
+<footer><span>BUÔN MA THUỘT / URBAN LAB</span><span>NGHIÊN CỨU ĐỘC LẬP · KHÔNG ĐẠI DIỆN CHÍNH QUYỀN HAY CHỦ ĐẦU TƯ</span><a href="#top">Lên đầu trang ↑</a></footer>
+</main>
+</div>
+<script src="./vendor/leaflet.js"></script>
+<script type="module" src="./app.js"></script>
+</body></html>
