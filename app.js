@@ -6,7 +6,7 @@ const $ = (sel)=>document.querySelector(sel);
 const state = {elev:7, span:160, lanes:2, bridge:true, traffic:true, night:false};
 const root=$('#stage3d'), canvas=$('#scene'), warning=$('#threeErr');
 let renderer,scene,camera,orbit,bridgeGroup,vehicleGroup,materialGround,skyLight,mainLight,roadMaterial;
-let vehicles=[],raf=0,prev=0;const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+let vehicles=[],raf=0,prev=0,lastFrame=0;const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 
 function mat(color,roughness=.88,metalness=0){return new THREE.MeshStandardMaterial({color,roughness,metalness});}
 function box(parent,w,h,d,x,y,z,material){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);m.position.set(x,y,z);parent.add(m);return m;}
@@ -20,7 +20,7 @@ function setup(){
 scene=new THREE.Scene();scene.background=new THREE.Color('#b1d4d7');scene.fog=new THREE.Fog('#b1d4d7',320,720);
 camera=new THREE.PerspectiveCamera(42,1,.3,1400);camera.position.set(215,164,213);
 renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,preserveDrawingBuffer:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.75));renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.35));renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.45;
 orbit=new OrbitControls(camera,canvas);orbit.enableDamping=true;orbit.dampingFactor=.055;orbit.target.set(0,2,0);orbit.minDistance=37;orbit.maxDistance=580;orbit.maxPolarAngle=Math.PI/2-.035;orbit.update();
 skyLight=new THREE.HemisphereLight(0xffffff,0x6a8679,2.2);scene.add(skyLight);
@@ -49,7 +49,7 @@ for(const x of [-27,27])box(scene,3.8,.12,560,x,-.10,0,sidewalk);
 const seed=({i:17,random(){this.i=(this.i*16807)%2147483647;return(this.i-1)/2147483646;}});const rnd=()=>seed.random();
 const walls=['#d3c4aa','#ece2d5','#cab7a8','#d5dce0','#c0b5a4','#e0c9b1','#a9bebd'];
 const roofs=['#b46d4e','#775952','#8b9b9c','#6c7377'];
-for(let i=0;i<165;i++){
+for(let i=0;i<88;i++){
  const x=(rnd()-.5)*710,z=(rnd()-.5)*540;
  if(Math.abs(z)<56||Math.abs(x)<45||Math.hypot(x/1.4,z/1.3)<45)continue;
  const w=8+rnd()*11,d=9+rnd()*12,h=5+rnd()*15;
@@ -57,8 +57,8 @@ for(let i=0;i<165;i++){
  box(scene,w+.5,.7,d+.5,x,h+.23,z,mat(roofs[i%roofs.length]));
  if(i%4===0)box(scene,w-.8,1.8,.08,x,h*.46,z+d/2+.03,mat('#8bb0af',.3));
 }
-for(let i=0;i<100;i++){const x=-340+(i*67)%690;let z=45+(i*49)%180;if(i%2)z=-z;addTree(scene,x,z,.6+rnd()*.55);}
-for(let i=0;i<24;i++){const x=-325+i*27;addTree(scene,x,24+(i%3)*3,.45);addTree(scene,x,-24-(i%4)*2,.43);}
+for(let i=0;i<55;i++){const x=-340+(i*67)%690;let z=45+(i*49)%180;if(i%2)z=-z;addTree(scene,x,z,.6+rnd()*.55);}
+for(let i=0;i<16;i++){const x=-325+i*27;addTree(scene,x,24+(i%3)*3,.45);addTree(scene,x,-24-(i%4)*2,.43);}
 const poleMat=mat('#7e8b8b'),lampMat=mat('#edbd64',.4);
 for(const x of [-104,-44,44,104]){
  for(const z of [-27,27]){
@@ -73,8 +73,9 @@ function roadY(x){const s=state.span/2,outer=s+95;if(Math.abs(x)<=s)return state
 function makeSlopedDeck(g,x1,y1,x2,y2,width){const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy);
 const m=box(g,L,.8,width,(x1+x2)/2,(y1+y2)/2,0,mat('#89959b'));
 m.rotation.z=Math.atan2(dy,dx);return m;}
+function disposeGroup(group){group.traverse(node=>{if(node.isMesh){node.geometry?.dispose();if(Array.isArray(node.material))node.material.forEach(m=>m.dispose());else node.material?.dispose();}});group.clear();}
 function buildBridge(){
-bridgeGroup.clear();bridgeGroup.visible=state.bridge;
+disposeGroup(bridgeGroup);bridgeGroup.visible=state.bridge;
 const s=state.span/2,h=state.elev,w=state.lanes===4?25:14;
 const road=mat('#343e49'),rail=mat('#d2dad8'),yellow=mat('#f5e4a7'),pier=mat('#8e9695'),accent=mat('#9eaaa7');
 for(const a of [[-s-95,.38,-s,h],[-s,h,s,h],[s,h,s+95,.38]]){
@@ -98,11 +99,11 @@ for(const x of [-s*.68,0,s*.68]){
 for(const x of [-s-95,s+95]){box(bridgeGroup,5,.8,w+3,x,.2,0,pier);}
 }
 function makeCar(parent,color){const g=new THREE.Group();parent.add(g);const body=mat(color,.5),glass=mat('#88bfc2',.24),tire=mat('#1f272b');box(g,5.6,1.5,2.5,0,.85,0,body);box(g,2.6,1.3,2.4,-.2,2,0,glass);for(const x of [-1.6,1.65])for(const z of [-1.15,1.15]){const t=new THREE.Mesh(new THREE.CylinderGeometry(.51,.51,.4,12),tire);t.rotation.x=Math.PI/2;t.position.set(x,.45,z);g.add(t);}return g;}
-function buildCars(){vehicleGroup.clear();vehicles=[];
+function buildCars(){disposeGroup(vehicleGroup);vehicles=[];
 const colors=['#f8f3e9','#edbd70','#8dc4c3','#3d6477','#e6a28d','#bdc9a3','#b6c8e1'];
 for(let i=0;i<13;i++){const layer=i<8?'bridge':'street',direction=i%2?1:-1,lane=(i%3-1)*(state.lanes===4?4.5:3);
 const car=makeCar(vehicleGroup,colors[i%colors.length]);car.scale.setScalar(.75+(i%3)*.1);vehicles.push({obj:car,layer,direction,lane,u:(i*37+10)%380,speed:9+(i%4)*3});}}
-function animate(t){raf=requestAnimationFrame(animate);const dt=Math.min((t-prev)/1000||0,.06);prev=t;
+function animate(t){raf=requestAnimationFrame(animate);if(document.hidden||t-lastFrame<33)return;lastFrame=t;const dt=Math.min((t-prev)/1000||0,.06);prev=t;
 if(state.traffic){for(const v of vehicles){v.u=(v.u+dt*v.speed)%440;let x=v.direction*(v.u-220);
 if(v.layer==='bridge'){v.obj.visible=state.bridge;v.obj.position.set(x,roadY(x)+.52,v.lane);v.obj.rotation.y=v.direction===1?0:Math.PI;}else{const z=x*1.1;v.obj.visible=true;v.obj.position.set(v.lane*.9,.12,clamp(z,-265,265));v.obj.rotation.y=v.direction===1?Math.PI/2:-Math.PI/2;}}
 }else for(const v of vehicles)v.obj.visible=false;
