@@ -1,158 +1,277 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const GEO = {lat:12.70036, lng:108.02698};
-const $ = (sel)=>document.querySelector(sel);
-const state = {elev:7, span:160, lanes:2, bridge:true, traffic:true, night:false};
-const root=$('#stage3d'), canvas=$('#scene'), warning=$('#threeErr');
-let renderer,scene,camera,orbit,bridgeGroup,vehicleGroup,materialGround,skyLight,mainLight,roadMaterial;
-let vehicles=[],raf=0,prev=0,lastFrame=0;const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-
-function mat(color,roughness=.88,metalness=0){return new THREE.MeshStandardMaterial({color,roughness,metalness});}
-function box(parent,w,h,d,x,y,z,material){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);m.position.set(x,y,z);parent.add(m);return m;}
-function disc(parent,r,x,y,z,material){const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,.14,48),material);m.position.set(x,y,z);parent.add(m);return m;}
-function addTree(parent,x,z,s=1){const trunk=mat('#625541'),foliage=mat('#477961'),foliage2=mat('#649e64');
-box(parent,.6*s,3*s,.6*s,x,1.5*s,z,trunk);
-const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(2.5*s,1),foliage);crown.position.set(x,4*s,z);parent.add(crown);
-const crown2=new THREE.Mesh(new THREE.IcosahedronGeometry(1.7*s,1),foliage2);crown2.position.set(x+1.2*s,4.7*s,z+.7*s);parent.add(crown2);
+const $=s=>document.querySelector(s);
+const GEO={lat:12.70036,lng:108.02698};
+const s={elev:7,span:160,lanes:4,bridge:true,traffic:true,night:false};
+let data,scene,renderer,camera,orbit,sun,sky,ground,bridge,carGroup,cars=[],map,baseLayer,frame=0,last=0,prev=0;
+const PI=Math.PI, min=(a,b)=>Math.min(a,b), r=Math.hypot;
+const m=(c,roughness=.85,metalness=0)=>new THREE.MeshStandardMaterial({color:c,roughness,metalness});
+const colors={asphalt:m('#354653'),lane:m('#f3e7c7'),shoulder:m('#b7b4a6'),island:m('#7a9e62'),pavement:m('#aaada2'),piers:m('#9faeaf'),guard:m('#d9e5df'),windows:m('#7698a3',.25)};
+const V=(p,y=.10)=>new THREE.Vector3(p[0],y,-p[1]);
+const travel=(t)=>[t*.979,t*.203]; // surveyed general 10/3 west-east bearing, approximate overpass axis
+function box(parent,w,h,d,x,y,z,mat){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);mesh.position.set(x,y,z);parent.add(mesh);return mesh;}
+function cylinder(parent,radius,height,x,y,z,material,sides=12){const ob=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,height,sides),material);ob.position.set(x,y,z);parent.add(ob);return ob;}
+function lineDistance(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);}
+function ringRadius(){return min(...data.ring.map(q=>r(q[0],q[1])));}
+function createRoad(parent,points,width,{line=true,curb=true,material=colors.asphalt}={}){
+ const pts=points.map(p=>V(p));if(pts.length<2)return;
+ const c=new THREE.CatmullRomCurve3(pts,false,'centripetal');
+ const samples=c.getSpacedPoints(Math.max(12,Math.ceil(c.getLength()/2.5)));
+ const sections=[];
+ for(let i=0;i<samples.length;i++){
+  const p=samples[i],a=samples[Math.max(0,i-1)],b=samples[Math.min(samples.length-1,i+1)];
+  const dx=b.x-a.x,dz=b.z-a.z,l=r(dx,dz)||1;
+  const px=-dz/l,pz=dx/l;
+  sections.push({p,px,pz});
+ }
+ function ribbon(offset,thickness,y,mat){
+  const pos=[],uv=[];
+  for(let i=0;i<sections.length-1;i++){
+   const a=sections[i],b=sections[i+1];
+   for(const v of [[a,-1],[b,-1],[a,1],[a,1],[b,-1],[b,1]]){
+    const sec=v[0],k=v[1],f=offset+thickness*k/2;
+    pos.push(sec.p.x+sec.px*f,y,sec.p.z+sec.pz*f);
+   }
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.computeVertexNormals();
+  const mesh=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:mat.color,roughness:mat.roughness,side:THREE.DoubleSide}));
+  parent.add(mesh);
+ }
+ if(curb){ribbon(0,width+1.15,.027,colors.shoulder);}
+ ribbon(0,width,.063,material);
+ if(line){for(const side of [-1,1])ribbon(side*(width/2-.65),.19,.085,colors.lane);
+ // dashed centerline by short thin shapes following OSM way direction
+ const n=Math.floor(c.getLength()/15);
+ for(let i=0;i<n;i++){const dist=(i+.2)/n;const p=c.getPointAt(dist),t=c.getTangentAt(dist);if(p.distanceTo(c.getPointAt(Math.min(1,dist+.014)))<.7)continue;
+ const ob=box(parent,6,.035,.18,p.x,.104,p.z,colors.lane);ob.rotation.y=Math.atan2(-t.z,t.x);}
+ }
+ return {curve:c,length:c.getLength()};
 }
-function setup(){
-scene=new THREE.Scene();scene.background=new THREE.Color('#b1d4d7');scene.fog=new THREE.Fog('#b1d4d7',320,720);
-camera=new THREE.PerspectiveCamera(42,1,.3,1400);camera.position.set(215,164,213);
-renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,preserveDrawingBuffer:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.35));renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.45;
-orbit=new OrbitControls(camera,canvas);orbit.enableDamping=true;orbit.dampingFactor=.055;orbit.target.set(0,2,0);orbit.minDistance=37;orbit.maxDistance=580;orbit.maxPolarAngle=Math.PI/2-.035;orbit.update();
-skyLight=new THREE.HemisphereLight(0xffffff,0x6a8679,2.2);scene.add(skyLight);
-mainLight=new THREE.DirectionalLight(0xffe2b0,3.3);mainLight.position.set(-100,210,100);scene.add(mainLight);
-const ground=mat('#7b9871');materialGround=ground;
-box(scene,750,.12,610,0,-.38,0,ground);
-const dirt=mat('#996b4b');
-for(let i=0;i<35;i++){const x=Math.sin(i*4.28)*315,z=Math.cos(i*2.75)*250;box(scene,8+((i*13)%17),.04,8+((i*11)%18),x,-.22,z,dirt);}
-roadMaterial=mat('#394850');
-box(scene,710,.16,30,0,-.05,0,roadMaterial);box(scene,18,.17,560,0,-.02,0,roadMaterial);
-const shoulder=mat('#c0ae9d'),line=mat('#e7dfbd');
-for(const z of [-16.5,16.5])box(scene,705,.1,.45,0,.08,z,shoulder);
-for(const x of [-10,10])box(scene,.4,.12,560,x,.13,0,shoulder);
-for(let x=-350;x<=350;x+=17){if(Math.abs(x)<30)continue;box(scene,8,.06,.27,x,.11,0,line);}
-for(let z=-280;z<=280;z+=16){if(Math.abs(z)<30)continue;box(scene,.25,.07,7,0,.15,z,line);}
-const island=mat('#789a54'),ring=mat('#d0a78c');
-disc(scene,24,0,.08,0,ring);disc(scene,15,0,.2,0,island);
-for(let t=0;t<20;t++){const a=t*Math.PI/10;addTree(scene,Math.cos(a)*11,Math.sin(a)*11,.24+((t*3)%4)*.04);}
-const stripes=mat('#e8e6de');
-for(let j=-5;j<=5;j++){const x=j*2.4;for(const z of [-42,42])box(scene,1.25,.04,4,x,.21,z,stripes);}
-for(let j=-5;j<=5;j++){const z=j*2.4;for(const x of [-45,45])box(scene,4,.04,1.25,x,.18,z,stripes);}
-const sidewalk=mat('#b6ada0');
-for(const z of [-35,35])box(scene,700,.12,3.8,0,-.09,z,sidewalk);
-for(const x of [-27,27])box(scene,3.8,.12,560,x,-.10,0,sidewalk);
-// Stylized neighboring urban fabric; expressly not a survey.
-const seed=({i:17,random(){this.i=(this.i*16807)%2147483647;return(this.i-1)/2147483646;}});const rnd=()=>seed.random();
-const walls=['#d3c4aa','#ece2d5','#cab7a8','#d5dce0','#c0b5a4','#e0c9b1','#a9bebd'];
-const roofs=['#b46d4e','#775952','#8b9b9c','#6c7377'];
-for(let i=0;i<88;i++){
- const x=(rnd()-.5)*710,z=(rnd()-.5)*540;
- if(Math.abs(z)<56||Math.abs(x)<45||Math.hypot(x/1.4,z/1.3)<45)continue;
- const w=8+rnd()*11,d=9+rnd()*12,h=5+rnd()*15;
- const b=box(scene,w,h,d,x,h/2-.12,z,mat(walls[i%walls.length]));
- box(scene,w+.5,.7,d+.5,x,h+.23,z,mat(roofs[i%roofs.length]));
- if(i%4===0)box(scene,w-.8,1.8,.08,x,h*.46,z+d/2+.03,mat('#8bb0af',.3));
+function createRing(){
+ const pts=data.ring,inner=8.95,width=10.4;
+ const center=pts.reduce((a,p)=>[a[0]+p[0]/pts.length,a[1]+p[1]/pts.length],[0,0]);
+ const out=pts.map(p=>{const ux=p[0]-center[0],uy=p[1]-center[1],l=r(ux,uy);return [p[0]+(width/2)*ux/l,p[1]+(width/2)*uy/l];});
+ const inn=pts.map(p=>{const ux=p[0]-center[0],uy=p[1]-center[1],l=r(ux,uy);return [p[0]-(width/2)*ux/l,p[1]-(width/2)*uy/l];});
+ const makeShape=(points)=>{const shape=new THREE.Shape();points.forEach((p,i)=>i?shape.lineTo(...p):shape.moveTo(...p));shape.closePath();return shape;};
+ const asphalt=makeShape(out),hole=new THREE.Path();
+ [...inn].reverse().forEach((p,i)=>i?hole.lineTo(...p):hole.moveTo(...p));hole.closePath();asphalt.holes.push(hole);
+ const g=new THREE.ShapeGeometry(asphalt,64),mesh=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:'#364955',side:THREE.DoubleSide}));mesh.rotation.x=-PI/2;mesh.position.y=.12;scene.add(mesh);
+ const inside=makeShape(inn),g2=new THREE.ShapeGeometry(inside),green=new THREE.Mesh(g2,new THREE.MeshStandardMaterial({color:'#79a56d',side:THREE.DoubleSide}));green.rotation.x=-PI/2;green.position.y=.143;scene.add(green);
+ // Interior stays explicitly traffic-free.
+ for(let k=0;k<11;k++){const th=k*2.399,R=2+Math.sqrt(k/11)*5.4;tree(scene,R*Math.cos(th),-R*Math.sin(th),.28+k%3*.06);}
+ cylinder(scene,2.5,.4,center[0],.38,-center[1],m('#c0b29a'),32);
+ cylinder(scene,.52,3.4,center[0],2.0,-center[1],m('#d2b485',.45,.3));
+ const curve=new THREE.CatmullRomCurve3(pts.map(p=>V(p,.16)),true,'centripetal');return curve;
 }
-for(let i=0;i<55;i++){const x=-340+(i*67)%690;let z=45+(i*49)%180;if(i%2)z=-z;addTree(scene,x,z,.6+rnd()*.55);}
-for(let i=0;i<16;i++){const x=-325+i*27;addTree(scene,x,24+(i%3)*3,.45);addTree(scene,x,-24-(i%4)*2,.43);}
-const poleMat=mat('#7e8b8b'),lampMat=mat('#edbd64',.4);
-for(const x of [-104,-44,44,104]){
- for(const z of [-27,27]){
-  box(scene,.36,9,.36,x,4.5,z,poleMat);box(scene,.32,.35,4.7,x,8.6,z+(z>0?-2:2),poleMat);
-  box(scene,.5,.1,1.5,x,8.4,z+(z>0?-4:4),lampMat);
- }}
-vehicleGroup=new THREE.Group();scene.add(vehicleGroup);
-bridgeGroup=new THREE.Group();scene.add(bridgeGroup);buildBridge();buildCars();resize();
-new ResizeObserver(resize).observe(root);requestAnimationFrame(animate);
+function tree(parent,x,z,size=1){
+ const wood=m('#72674c'),leaf=m('#397460');
+ cylinder(parent,.4*size,2.6*size,x,1.5*size,z,wood,7);
+ const ob=new THREE.Mesh(new THREE.IcosahedronGeometry(2.15*size,1),leaf);ob.position.set(x,4*size,z);parent.add(ob);
 }
-function roadY(x){const s=state.span/2,outer=s+95;if(Math.abs(x)<=s)return state.elev;return Math.max(.4,state.elev*(1-(Math.abs(x)-s)/95));}
-function makeSlopedDeck(g,x1,y1,x2,y2,width){const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy);
-const m=box(g,L,.8,width,(x1+x2)/2,(y1+y2)/2,0,mat('#89959b'));
-m.rotation.z=Math.atan2(dy,dx);return m;}
-function disposeGroup(group){group.traverse(node=>{if(node.isMesh){node.geometry?.dispose();if(Array.isArray(node.material))node.material.forEach(m=>m.dispose());else node.material?.dispose();}});group.clear();}
-function buildBridge(){
-disposeGroup(bridgeGroup);bridgeGroup.visible=state.bridge;
-const s=state.span/2,h=state.elev,w=state.lanes===4?25:14;
-const road=mat('#343e49'),rail=mat('#d2dad8'),yellow=mat('#f5e4a7'),pier=mat('#8e9695'),accent=mat('#9eaaa7');
-for(const a of [[-s-95,.38,-s,h],[-s,h,s,h],[s,h,s+95,.38]]){
- const [x1,y1,x2,y2]=a;makeSlopedDeck(bridgeGroup,x1,y1,x2,y2,w);
- const L=Math.hypot(x2-x1,y2-y1);const angle=Math.atan2(y2-y1,x2-x1);
- const mx=(x1+x2)/2,my=(y1+y2)/2;
- const surface=box(bridgeGroup,L,.09,w-.65,mx,my+.48,0,road);surface.rotation.z=angle;
- for(const z of [-w/2+.35,w/2-.35]){const guard=box(bridgeGroup,L,1.2,.38,mx,my+1.45,z,rail);guard.rotation.z=angle;}
- for(const z of [-w/2+1.1,w/2-1.1]){const edge=box(bridgeGroup,L,.035,.18,mx,my+.57,z,yellow);edge.rotation.z=angle;}
- for(const z of (state.lanes===4?[-w/4,0,w/4]:[0])){
-  for(let x=x1+8;x<x2-7;x+=17){
-   const xx=clamp(x,x1+3,x2-3),yy=y1+(xx-x1)/(x2-x1)*(y2-y1)+.61;
-   const marker=box(bridgeGroup,8,.028,.16,xx,yy,z,yellow);marker.rotation.z=angle;
+function label(parent,text,pos,color='#d5f3a5'){
+ const c=document.createElement('canvas');c.width=640;c.height=112;
+ const ctx=c.getContext('2d');ctx.fillStyle='#102d3cdd';ctx.roundRect(2,2,636,108,18);ctx.fill();
+ ctx.fillStyle=color;ctx.font='bold 32px system-ui,Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,320,57,610);
+ const tx=new THREE.CanvasTexture(c),sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tx,transparent:true,depthWrite:false}));
+ sp.position.copy(V(pos,13));sp.scale.set(47,8.2,1);parent.add(sp);
+}
+function setupWorld(){
+ scene=new THREE.Scene();scene.background=new THREE.Color('#9cbcc8');scene.fog=new THREE.Fog('#9cbcc8',390,820);
+ camera=new THREE.PerspectiveCamera(43,1,.4,1700);camera.position.set(235,195,245);
+ const root=$('#stage3d');
+ renderer=new THREE.WebGLRenderer({canvas:$('#scene'),antialias:true,preserveDrawingBuffer:true});
+ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.25));
+ renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.28;
+ orbit=new OrbitControls(camera,$('#scene'));orbit.target.set(0,2,0);orbit.enableDamping=true;orbit.maxPolarAngle=PI/2-.035;orbit.minDistance=33;orbit.maxDistance=580;orbit.update();
+ sky=new THREE.HemisphereLight(0xffffff,0x627a80,2.45);scene.add(sky);sun=new THREE.DirectionalLight(0xffe3c7,3);sun.position.set(-120,230,-100);scene.add(sun);
+ ground=m('#79946f');box(scene,840,.15,790,0,-.27,0,ground);
+ // road strips sourced from OSM node geometry (not axis-aligned boxes).
+ for(const road of data.roads)createRoad(scene,road.points,road.width);
+ const circle=createRing();window.__junctionRoundaboutCurve=circle;
+ // Street lights, buildings and planted verge.
+ const walls=['#c8bcad','#dde2d8','#dfc9ae','#e9e2da','#a9bcb8','#d5d1bc'],roofs=['#945f51','#596f70','#8d8280'];
+ let seed=7844;const rand=()=>{seed=(seed*16807)%2147483647;return(seed-1)/2147483646;};
+ function clearOfRoad(p,margin){if(r(...p)<42)return false;return data.roads.every(road=>{const q=road.points;for(let j=1;j<q.length;j++)if(lineDistance(p,q[j-1],q[j])<road.width/2+margin)return false;return true;});}
+ for(let i=0;i<185;i++){
+  const x=(rand()-.5)*700,y=(rand()-.5)*620;
+  if(!clearOfRoad([x,y],16))continue;
+  if(i%3===0){tree(scene,x,-y,.55+rand()*.4);continue;}
+  const w=8+rand()*11,d=10+rand()*13,h=7+rand()*11;
+  box(scene,w,h,d,x,h/2-.17,-y,m(walls[i%walls.length]));
+  box(scene,w+.6,.65,d+.6,x,h+.16,-y,m(roofs[i%roofs.length]));
+  if(i%3===1)box(scene,w-1.5,2.2,.09,x,h*.45,-y+d/2+.06,colors.windows);
+ }
+ for(const t of [-210,-145,150,235]){const p=travel(t);
+ const steel=m('#6a7e82'),light=m('#fff1ad',.6);
+ cylinder(scene,.25,9,p[0]+18,4.5,-p[1]+12,steel);
+ box(scene,4,.16,.26,p[0]+16,8.6,-p[1]+12,steel);
+ box(scene,1.8,.08,.35,p[0]+14,8.5,-p[1]+12,light);
+ }
+ label(scene,'01 · PHẠM NGŨ LÃO NAM',[12,-185]);
+ label(scene,'02 · PHẠM NGŨ LÃO TÂY BẮC',[-110,170]);
+ label(scene,'03 · NHÁNH CHỮ Y',[22,92],'#ffd4a3');
+ label(scene,'04 · 10/3 TÂY',[-220,-48]);
+ label(scene,'05 · 10/3 ĐÔNG',[230,48]);
+ bridge=new THREE.Group();scene.add(bridge);carGroup=new THREE.Group();scene.add(carGroup);
+ makeBridge();makeTraffic();
+ new ResizeObserver(resize).observe(root);resize();requestAnimationFrame(animate);
+}
+function clearMeshGroup(g){g.traverse(o=>{if(o.isMesh){o.geometry?.dispose();}});g.clear();}
+function bridgeY(t){const core=s.span/2,outer=core+145;return Math.abs(t)<=core?s.elev:Math.max(.35,s.elev*(1-(Math.abs(t)-core)/145));}
+function blockBetween(parent,xa,ya,za,xb,yb,zb,wide,high,material){
+ const from=new THREE.Vector3(xa,ya,za),to=new THREE.Vector3(xb,yb,zb),v=to.clone().sub(from);
+ const b=box(parent,v.length(),high,wide,(xa+xb)/2,(ya+yb)/2,(za+zb)/2,material);b.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0),v.normalize());return b;
+}
+function makeBridge(){
+ clearMeshGroup(bridge);bridge.visible=s.bridge;
+ const width=s.lanes===4?19.5:12.4,cores=s.span/2,edge=cores+145;
+ const oldGuard=colors.guard,road=m('#374751'),beam=m('#91a6a9'),safety=m('#c5d9d8');
+ for(let t=-edge;t<edge;t+=6){
+ const T=Math.min(edge,t+6),p=travel(t),q=travel(T),y1=bridgeY(t),y2=bridgeY(T);
+ blockBetween(bridge,p[0],y1,p[1]*-1,q[0],y2,q[1]*-1,width,.92,beam);
+ blockBetween(bridge,p[0],y1+.50,-p[1],q[0],y2+.50,-q[1],width-.7,.12,road);
+ for(const sign of [-1,1]){
+  const offset=width/2-.36;
+  blockBetween(bridge,p[0]+sign*(-.203)*offset,y1+1.28,-p[1]+sign*(-.979)*offset,q[0]+sign*(-.203)*offset,y2+1.28,-q[1]+sign*(-.979)*offset,.3,.95,oldGuard);
+ }
+ if(Math.round((t+edge)/6)%3===0){
+  for(const lane of (s.lanes===4?[-width/4,0,width/4]:[0])){
+   blockBetween(bridge,p[0]-.203*lane,y1+.59,-p[1]-.979*lane,q[0]-.203*lane,y2+.59,-q[1]-.979*lane,.14,.02,colors.lane);
   }
  }
+ }
+ for(const t of [-cores*.76,cores*.76]){
+  // Median support measured against both separated OSM 10/3 carriageways.
+  // Never place a column in a ground traffic lane or on the central island.
+  const p=travel(t),height=bridgeY(t)-.65,median=t<0?3:1;
+  const bx=p[0]-.203*median,bz=-p[1]-.979*median;
+  cylinder(bridge,1.15,height-.6,bx,(height-.6)/2,bz,colors.piers);
+  const cap=box(bridge,4,1.0,width*.85,bx,height-.5,bz,safety);
+  cap.rotation.y=Math.atan2(.203,.979);
+ }
 }
-for(const x of [-s*.68,0,s*.68]){
- const underside=h-.85;if(underside<4.5)continue;
- for(const z of [-w*.28,w*.28]){box(bridgeGroup,2.1,underside-.4,2.1,x,(underside-.4)/2,z,pier);box(bridgeGroup,5,.8,4,x,underside-.85,z,accent);}
+function makeVehicle(parent,{truck=false,bike=false,tint='#e2c48e'}={}){
+ const group=new THREE.Group();parent.add(group);
+ const body=m(tint,.48),glass=m('#84b0b5',.3),rubber=m('#252c33');
+ let length=truck?8:bike?2.1:4.7,wide=truck ? 2.5 : (bike ? 0.75 : 2.1);
+ box(group,length,truck?2.05:bike ? 0.7 : 1.15,wide,0,truck?1.25:bike ? 0.55 : 0.90,0,body);
+ if(truck)box(group,2.8,1.45,wide-.2,length*.27,2.8,0,glass);
+ else if(!bike)box(group,2.8,.87,wide-.1,-.25,1.8,0,glass);
+ for(const X of (truck?[-2.8,2.5]:bike?[-.72,.72]:[-1.5,1.5])){
+  for(const Z of [-wide*.46,wide*.46]){
+   const tire=new THREE.Mesh(new THREE.CylinderGeometry(bike ? 0.35 : 0.43,bike ? 0.35 : 0.43,.28,12),rubber);
+   tire.rotation.x=PI/2;tire.position.set(X,bike ? 0.35 : 0.43,Z);group.add(tire);
+  }
+ }
+ return group;
 }
-for(const x of [-s-95,s+95]){box(bridgeGroup,5,.8,w+3,x,.2,0,pier);}
-}
-function makeCar(parent,color){const g=new THREE.Group();parent.add(g);const body=mat(color,.5),glass=mat('#88bfc2',.24),tire=mat('#1f272b');box(g,5.6,1.5,2.5,0,.85,0,body);box(g,2.6,1.3,2.4,-.2,2,0,glass);for(const x of [-1.6,1.65])for(const z of [-1.15,1.15]){const t=new THREE.Mesh(new THREE.CylinderGeometry(.51,.51,.4,12),tire);t.rotation.x=Math.PI/2;t.position.set(x,.45,z);g.add(t);}return g;}
-function buildCars(){disposeGroup(vehicleGroup);vehicles=[];
-const colors=['#f8f3e9','#edbd70','#8dc4c3','#3d6477','#e6a28d','#bdc9a3','#b6c8e1'];
-for(let i=0;i<13;i++){const layer=i<8?'bridge':'street',direction=i%2?1:-1,lane=(i%3-1)*(state.lanes===4?4.5:3);
-const car=makeCar(vehicleGroup,colors[i%colors.length]);car.scale.setScalar(.75+(i%3)*.1);vehicles.push({obj:car,layer,direction,lane,u:(i*37+10)%380,speed:9+(i%4)*3});}}
-function animate(t){raf=requestAnimationFrame(animate);if(document.hidden||t-lastFrame<33)return;lastFrame=t;const dt=Math.min((t-prev)/1000||0,.06);prev=t;
-if(state.traffic){for(const v of vehicles){v.u=(v.u+dt*v.speed)%440;let x=v.direction*(v.u-220);
-if(v.layer==='bridge'){v.obj.visible=state.bridge;v.obj.position.set(x,roadY(x)+.52,v.lane);v.obj.rotation.y=v.direction===1?0:Math.PI;}else{const z=x*1.1;v.obj.visible=true;v.obj.position.set(v.lane*.9,.12,clamp(z,-265,265));v.obj.rotation.y=v.direction===1?Math.PI/2:-Math.PI/2;}}
-}else for(const v of vehicles)v.obj.visible=false;
-orbit.update();renderer.render(scene,camera);}
-function resize(){if(!renderer)return;const r=root.getBoundingClientRect();const w=Math.max(320,r.width),h=Math.max(320,r.height);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
-function setView(name){
- if(name==='top')camera.position.set(2,310,3);
- else if(name==='road')camera.position.set(54,15,100);
- else camera.position.set(215,164,213);
- orbit.target.set(0,2,0);orbit.update();
-}
-function applyNight(){scene.background=new THREE.Color(state.night?'#101a30':'#b1d4d7');scene.fog.color.set(state.night?'#101a30':'#b1d4d7');mainLight.intensity=state.night?.55:3.3;skyLight.intensity=state.night?.85:2.2;renderer.toneMappingExposure=state.night?1.05:1.45;materialGround.color.set(state.night?'#49624e':'#7b9871');}
-$('#elev').addEventListener('input',e=>{state.elev=+e.target.value;$('#elevValue').textContent=state.elev.toFixed(1)+' m';buildBridge();});
-$('#span').addEventListener('input',e=>{state.span=+e.target.value;$('#spanValue').textContent=state.span+' m';buildBridge();});
-$('#lanes').addEventListener('change',e=>{state.lanes=+e.target.value;buildBridge();buildCars();});
-$('#showBridge').addEventListener('change',e=>{state.bridge=e.target.checked;bridgeGroup.visible=state.bridge;});
-$('#traffic').addEventListener('change',e=>{state.traffic=e.target.checked;});
-$('#night').addEventListener('change',e=>{state.night=e.target.checked;applyNight();});
-document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
-$('#reset').addEventListener('click',()=>{for(const [k,v] of Object.entries({elev:7,span:160,lanes:2,bridge:true,traffic:true,night:false}))state[k]=v;
-$('#elev').value=7;$('#span').value=160;$('#elevValue').textContent='7.0 m';$('#spanValue').textContent='160 m';$('#lanes').value='2';
-$('#showBridge').checked=true;$('#traffic').checked=true;$('#night').checked=false;buildBridge();buildCars();applyNight();setView('iso');});
-$('#snapshot').addEventListener('click',()=>{try{renderer.render(scene,camera);const a=document.createElement('a');a.download='Pham-Ngu-Lao-flyover-CONCEPT-3D.png';a.href=renderer.domElement.toDataURL('image/png');a.click();}catch(e){alert('Không thể xuất ảnh trong trình duyệt này.');}});
-let map=null,baseLayer=null;const tileOptions={maxZoom:20};
-const tiles={
- street:{url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',opts:{...tileOptions,attribution:'&copy; OpenStreetMap contributors',maxNativeZoom:19}},
- satellite:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',opts:{...tileOptions,attribution:'Tiles &copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community',maxNativeZoom:19}},
- terrain:{url:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',opts:{...tileOptions,attribution:'&copy; OpenStreetMap contributors, SRTM | OpenTopoMap (CC BY-SA)',maxNativeZoom:17}}
+const named={
+ south:'south-pham',north:'north-pham',fork:'north-fork',win:'west-in',wout:'west-out',ein:'east-in',eout:'east-out'
 };
-function setMapLayer(name){if(!map)return;if(baseLayer)map.removeLayer(baseLayer);baseLayer=L.tileLayer(tiles[name].url,tiles[name].opts).addTo(map);document.querySelectorAll('.map-tools button').forEach(b=>b.classList.toggle('active',b.id===name));}
+function getRoad(id){return data.roads.find(w=>w.id===named[id]).points;}
+const idx={south:11,north:22,win:8,ein:19,wout:2,eout:14};
+function ringSection(from,to){const o=[],ring=data.ring;let i=idx[from],steps=0;
+ while(true){o.push(ring[i]);if(i===idx[to]&&steps>0)break;i=(i+1)%ring.length;if(++steps>ring.length+1)break;}return o;}
+function route(from,to){
+ const ins=from==='south'?getRoad('south'):from==='north'?getRoad('north').slice().reverse():from==='fork'?[...getRoad('fork').slice(),...getRoad('north').slice(0,2).reverse()]:getRoad(from);
+ const outs=to==='south'?getRoad('south').slice().reverse():to==='north'?getRoad('north'):to==='fork'?[...getRoad('north').slice(0,2),...getRoad('fork').slice().reverse()]:getRoad(to);
+ let pts=[...ins,...ringSection(from==='fork'?'north':from,to==='fork'?'north':to),...outs];
+ // Limit at 240m to keep cars visible. Fork lengths deliberately retained.
+ pts=pts.filter((p,i)=>r(...p)<265||i===0||i===pts.length-1);
+ const curve=new THREE.CatmullRomCurve3(pts.map(p=>V(p,.22)),false,'centripetal');
+ return {curve,length:curve.getLength(),name:from+'-'+to};
+}
+function makeTraffic(){
+ clearMeshGroup(carGroup);cars=[];
+ const flow=[['south','eout'],['south','wout'],['north','eout'],['north','south'],['fork','wout'],['fork','south'],['win','north'],['win','eout'],['win','south'],['ein','wout'],['ein','south'],['ein','fork']];
+ const shades=['#d8eef0','#e3b66e','#df847c','#8baaba','#ced4bb','#f0e4c4','#b6b7c3','#9bb593'];
+ flow.forEach(([a,b],i)=>{try{
+  const r=route(a,b);const ob=makeVehicle(carGroup,{tint:shades[i%shades.length],bike:i%5===3});
+  cars.push({ob,...r,progress:((i%4)*.23+.06)%1,speed:7+(i%5)*1.7,kind:'round'});
+ }catch(err){console.error('Route',a,b,err);}});
+ // Two-way elevated traffic, separate lane offsets, fully above the island.
+ for(let i=0;i<10;i++){const ob=makeVehicle(carGroup,{truck:i===2||i===8,tint:shades[(i+3)%shades.length]});
+  cars.push({ob,kind:'bridge',progress:(i%5)*.198,speed:12+i%3*2,direction:i%2?1:-1,lane:i%2?4:-4});}
+}
+function animate(timestamp){
+ requestAnimationFrame(animate);
+ if(document.hidden||timestamp-last<32)return;
+ last=timestamp;const dt=min((timestamp-prev)/1000||0,.06);prev=timestamp;const totalBridge=s.span+290;
+ for(const o of cars){
+  o.ob.visible=s.traffic&&(s.bridge||o.kind!=='bridge');if(!o.ob.visible)continue;
+  if(s.traffic)o.progress=(o.progress+dt*o.speed/(o.kind==='bridge'?totalBridge:o.length))%1;
+  if(o.kind==='bridge'){
+   const t=(o.progress-.5)*totalBridge*o.direction,p=travel(t),py=bridgeY(t)+1.02;
+   const bx=p[0]-.203*o.lane,bz=-p[1]-.979*o.lane;
+   o.ob.position.set(bx,py,bz);o.ob.rotation.set(0,Math.atan2((o.direction > 0 ? 0.203 : -0.203), (o.direction > 0 ? 0.979 : -0.979)),0);continue;
+  }
+  const p=o.curve.getPointAt(o.progress),tg=o.curve.getTangentAt(o.progress);
+  o.ob.position.copy(p);o.ob.rotation.y=Math.atan2(-tg.z,tg.x);
+  // Safety: never let a ground-traffic car center enter the roundabout island.
+  const radius=Math.hypot(p.x,p.z);
+  if(radius<11.0){const k=11.15/(radius||1);o.ob.position.x*=k;o.ob.position.z*=k;}
+ }
+ orbit.update();renderer.render(scene,camera);
+}
+function resize(){if(!renderer)return;const rect=$('#stage3d').getBoundingClientRect();renderer.setSize(Math.max(340,rect.width),Math.max(260,rect.height),false);camera.aspect=Math.max(340,rect.width)/Math.max(260,rect.height);camera.updateProjectionMatrix();}
+function view(v){if(v==='top')camera.position.set(1,320,4);else if(v==='road')camera.position.set(-175,24,135);else camera.position.set(235,195,245);orbit.target.set(0,2,0);orbit.update();}
+function dark(){scene.background.set(s.night?'#101a30':'#9cbcc8');scene.fog.color.set(s.night?'#101a30':'#9cbcc8');sun.intensity=s.night ? 0.5 : 3;sky.intensity=s.night ? 0.88 : 2.45;ground.color.set(s.night?'#384f43':'#79946f');renderer.toneMappingExposure=s.night?1:1.28;}
+function wireControls(){
+ $('#elev').addEventListener('input',e=>{s.elev=+e.target.value;$('#elevValue').textContent=s.elev.toFixed(1)+' m';makeBridge();});
+ $('#span').addEventListener('input',e=>{s.span=+e.target.value;$('#spanValue').textContent=s.span+' m';makeBridge();});
+ $('#lanes').addEventListener('change',e=>{s.lanes=+e.target.value;makeBridge();});
+ $('#showBridge').addEventListener('change',e=>{s.bridge=e.target.checked;bridge.visible=s.bridge;});
+ $('#traffic').addEventListener('change',e=>{s.traffic=e.target.checked;});
+ $('#night').addEventListener('change',e=>{s.night=e.target.checked;dark();});
+ document.querySelectorAll('[data-view]').forEach(e=>e.addEventListener('click',()=>view(e.dataset.view)));
+ $('#reset').addEventListener('click',()=>{Object.assign(s,{elev:7,span:160,lanes:4,bridge:true,traffic:true,night:false});
+  $('#elev').value=7;$('#elevValue').textContent='7.0 m';$('#span').value=160;$('#spanValue').textContent='160 m';$('#lanes').value='4';$('#showBridge').checked=true;$('#traffic').checked=true;$('#night').checked=false;makeBridge();dark();view('iso');});
+ $('#snapshot').addEventListener('click',()=>{renderer.render(scene,camera);const a=document.createElement('a');a.download='NGA-5-PHAM-NGU-LAO-3D-CONCEPT.png';a.href=renderer.domElement.toDataURL('image/png');a.click();});
+ for(const id of ['street','satellite','terrain'])$('#'+id).addEventListener('click',()=>tile(id));
+ $('#tab3d').addEventListener('click',()=>tab(false));$('#tabMap').addEventListener('click',()=>tab(true));
+}
+const layers={
+ street:['https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png','© OpenStreetMap contributors',19],
+ satellite:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}','Imagery © Esri and data partners',19],
+ terrain:['https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png','© OpenTopoMap / OpenStreetMap / SRTM',17]
+};
+function tile(name){
+ if(!map)return;if(baseLayer)map.removeLayer(baseLayer);
+ const [url,atr,max]=layers[name];baseLayer=L.tileLayer(url,{maxZoom:20,maxNativeZoom:max,attribution:atr}).addTo(map);
+ document.querySelectorAll('.map-tools button').forEach(b=>b.classList.toggle('active',b.id===name));
+}
+function geo(point){return [GEO.lat+point[1]/111320,GEO.lng+point[0]/(111320*Math.cos(GEO.lat*PI/180))];}
 function initMap(){
  if(map||!window.L)return;
- map=L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([GEO.lat,GEO.lng],18);
- setMapLayer('street');
- const pin=L.divIcon({className:'',html:'<div class="junction-pin"></div>',iconSize:[22,22],iconAnchor:[11,11]});
- L.marker([GEO.lat,GEO.lng],{icon:pin}).addTo(map).bindPopup('<b>Giao lộ Phạm Ngũ Lão × Vành đai Tây</b><br>Tâm nút giao ước tính từ dữ liệu OSM.<br>Không phải mốc khảo sát địa chính.').openPopup();
- L.circle([GEO.lat,GEO.lng],{radius:27,color:'#c7f465',weight:2,fillColor:'#c7f465',fillOpacity:.1}).addTo(map);
+ map=L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([GEO.lat,GEO.lng],18);tile('street');
+ L.circleMarker([GEO.lat,GEO.lng],{radius:6,color:'#142631',weight:3,fillColor:'#c7f465',fillOpacity:1}).addTo(map).bindPopup('Nút giao Phạm Ngũ Lão – Vành đai 10/3<br>5 nhánh nhìn thấy gồm một nhánh dân cư chữ Y nối vào Phạm Ngũ Lão trước vòng xoay.').openPopup();
+ // Highlight verified OpenStreetMap way centerlines, NOT an invented flyover alignment.
+ for(const road of data.roads)L.polyline(road.points.map(geo),{color:road.leg==='north-fork'?'#eea16c':'#69cedc',weight:road.leg==='north-fork'?5:3,opacity:.84,dashArray:road.leg==='north-fork'?'5,6':null}).addTo(map).bindPopup(road.name+'<br>Way OSM: '+road.osmWayId);
+ L.polyline([...data.ring,data.ring[0]].map(geo),{color:'#c7f465',weight:5}).addTo(map).bindPopup('Quỹ đạo vòng xoay thực từ OSM · Way '+data.ringOsmWay);
 }
-const changeTab=(isMap)=>{
-$('#tabMap').classList.toggle('active',isMap);$('#tab3d').classList.toggle('active',!isMap);$('#tabMap').setAttribute('aria-selected',String(isMap));$('#tab3d').setAttribute('aria-selected',String(!isMap));
-$('#mapStage').hidden=!isMap;$('#stage3d').hidden=isMap;$('#modeNote').textContent=isMap?'BẢN ĐỒ THỰC · TÂM GIAO LỘ ƯỚC TÍNH':'MÔ HÌNH ĐANG HIỂN THỊ: CẦU VƯỢT GIẢ ĐỊNH';
-if(isMap){initMap();setTimeout(()=>map?.invalidateSize(),30);}else resize();
-};
-$('#tab3d').addEventListener('click',()=>changeTab(false));$('#tabMap').addEventListener('click',()=>changeTab(true));
-for(const n of ['street','satellite','terrain'])$('#'+n).addEventListener('click',()=>setMapLayer(n));
-function initGallery(){const g=$('#galleryGrid');const names=['Phối cảnh tổng thể','Không gian nút giao','Tầm nhìn đô thị'];let loaded=0;
-const cards=[1,2,3].map((i)=>{const el=document.createElement('figure');el.className='gallery-card';const im=document.createElement('img');im.loading='lazy';im.alt='Phối cảnh mô phỏng cầu vượt giả định Phạm Ngũ Lão – Vành đai Tây, phương án ý tưởng số '+i;
-const src='./assets/concept-'+i+'.jpg';im.src=src;im.onload=()=>{loaded++;};im.onerror=()=>{el.style.display='none';};el.append(im);const cap=document.createElement('figcaption');cap.innerHTML='<strong>'+names[i-1]+'</strong>Concept visualization · Không phải dự án chính thức';el.append(cap);return el;});
-g.replaceChildren(...cards);
+function tab(showMap){
+ $('#stage3d').hidden=showMap;$('#mapStage').hidden=!showMap;
+ $('#tab3d').classList.toggle('active',!showMap);$('#tabMap').classList.toggle('active',showMap);
+ $('#tab3d').setAttribute('aria-selected',String(!showMap));$('#tabMap').setAttribute('aria-selected',String(showMap));
+ $('#modeNote').textContent=showMap?'BẢN ĐỒ THỰC / 5 NHÁNH · OSM':'MÔ PHỎNG NGÃ 5 / CẦU VƯỢT GIẢ ĐỊNH';
+ if(showMap){initMap();setTimeout(()=>map?.invalidateSize(),20);}else resize();
 }
-try{setup();}catch(err){console.error('3D init failed',err);warning.hidden=false;}
-initGallery();
+function gallery(){
+ const area=$('#galleryGrid');area.replaceChildren();
+ const names=['Ngã 5 · mô hình 3D theo tim đường OSM','Ngã 5 · phối cảnh ý tưởng A','Ngã 5 · phối cảnh ý tưởng B'];
+ for(let i=1;i<=3;i++){
+  const fig=document.createElement('figure');fig.className='gallery-card';const img=document.createElement('img');img.src=['./assets/junction-5-iso.png','./assets/junction-five-way-1.jpg','./assets/junction-five-way-2.jpg'][i-1];
+  img.loading='lazy';img.alt=names[i-1]+' — ảnh ý tưởng AI không phải ảnh hoặc bản vẽ chính thức';fig.append(img);
+  const cap=document.createElement('figcaption');cap.innerHTML='<strong>'+names[i-1]+'</strong>'+(i===1?'Góc 3D lấy từ bản đồ OSM, cầu giả định':'Phối cảnh AI ý tưởng, không phải bản vẽ thi công');fig.append(cap);area.append(fig);
+ }
+}
+async function boot(){
+ wireControls();gallery();
+ try{
+  const res=await fetch('./junction-geometry.json',{cache:'no-store'});if(!res.ok)throw Error('OSM geometry HTTP '+res.status);data=await res.json();
+  if(data.ring.length<12||data.roads.length!==7||data.junctionLegs.length!==5)throw Error('Invalid OSM topology');
+  setupWorld();window.__junctionModelReady=true;
+ }catch(err){console.error(err);const warning=$('#threeErr');warning.hidden=false;warning.textContent='Không thể dựng mô hình: '+err.message;}
+}
+boot();
