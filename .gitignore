@@ -2,6 +2,13 @@ node_modules/
 .DS_Store
 *.log
 .chrome-test/
+.chrome-smoke/
 headless-dom.txt
 cdp-test.cjs
 cdp-debug.cjs
+cdp-compile.cjs
+cdp-snapshot.cjs
+junction-osm-research.xml
+analyze-osm.ps1
+geo-shape-research.py
+generate-map-geometry.py

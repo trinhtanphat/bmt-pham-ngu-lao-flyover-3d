@@ -1,0 +1,327 @@
+{
+  "center": {
+    "lat": 12.70036,
+    "lon": 108.02698
+  },
+  "provenance": "OpenStreetMap way geometries, fetched 2026-10-09; © OpenStreetMap contributors / ODbL",
+  "reference": "https://www.openstreetmap.org/?mlat=12.70036&mlon=108.02698#map=19/12.70036/108.02698",
+  "junctionLegs": [
+    "Phạm Ngũ Lão nam",
+    "Phạm Ngũ Lão tây bắc",
+    "Nhánh dân cư bắc tách chữ Y",
+    "Vành đai/10 Tháng 3 tây",
+    "Vành đai/10 Tháng 3 đông"
+  ],
+  "junctionNote": "Five visual approaches include short residential north spur connecting upstream of roundabout; it is NOT a fifth direct roundabout entry. Carriageway directions are separate.",
+  "ringOsmWay": 1251057553,
+  "ring": [
+    [
+      -3.71,
+      14.45
+    ],
+    [
+      -7.42,
+      12.46
+    ],
+    [
+      -10.44,
+      9.52
+    ],
+    [
+      -12.31,
+      6.36
+    ],
+    [
+      -13.37,
+      2.83
+    ],
+    [
+      -13.53,
+      -0.86
+    ],
+    [
+      -12.8,
+      -4.46
+    ],
+    [
+      -11.22,
+      -7.79
+    ],
+    [
+      -8.87,
+      -10.63
+    ],
+    [
+      -6.08,
+      -12.72
+    ],
+    [
+      -2.88,
+      -14.12
+    ],
+    [
+      0.55,
+      -14.74
+    ],
+    [
+      6.46,
+      -13.93
+    ],
+    [
+      11.6,
+      -10.89
+    ],
+    [
+      15.15,
+      -6.09
+    ],
+    [
+      16.38,
+      -2.09
+    ],
+    [
+      16.46,
+      2.08
+    ],
+    [
+      15.41,
+      6.12
+    ],
+    [
+      13.28,
+      9.71
+    ],
+    [
+      10.25,
+      12.58
+    ],
+    [
+      7.2,
+      14.26
+    ],
+    [
+      3.86,
+      15.2
+    ],
+    [
+      0.39,
+      15.34
+    ]
+  ],
+  "roads": [
+    {
+      "id": "south-pham",
+      "osmWayId": 1185863663,
+      "name": "Phạm Ngũ Lão · phía nam",
+      "leg": "south",
+      "width": 11,
+      "oneway": false,
+      "points": [
+        [
+          25.84,
+          -328.99
+        ],
+        [
+          20.6,
+          -313.49
+        ],
+        [
+          5.49,
+          -258.52
+        ],
+        [
+          3.56,
+          -165.56
+        ],
+        [
+          3.01,
+          -138.73
+        ],
+        [
+          1.65,
+          -73.63
+        ],
+        [
+          0.52,
+          -19.16
+        ],
+        [
+          0.55,
+          -14.74
+        ]
+      ]
+    },
+    {
+      "id": "north-pham",
+      "osmWayId": 1186726656,
+      "name": "Phạm Ngũ Lão · phía tây bắc",
+      "leg": "northwest",
+      "width": 10,
+      "oneway": false,
+      "points": [
+        [
+          0.39,
+          15.34
+        ],
+        [
+          -0.41,
+          25.63
+        ],
+        [
+          -2.28,
+          29.57
+        ],
+        [
+          -16.1,
+          58.77
+        ],
+        [
+          -54.55,
+          110.62
+        ],
+        [
+          -111.33,
+          185.11
+        ],
+        [
+          -127.98,
+          206.96
+        ],
+        [
+          -150.3,
+          250.08
+        ],
+        [
+          -163.87,
+          276.31
+        ],
+        [
+          -167.44,
+          284.37
+        ]
+      ]
+    },
+    {
+      "id": "north-fork",
+      "osmWayId": 538950821,
+      "name": "Nhánh dân cư phía bắc (chữ Y)",
+      "leg": "north-fork",
+      "width": 6.5,
+      "oneway": false,
+      "points": [
+        [
+          1.95,
+          90.09
+        ],
+        [
+          -0.41,
+          25.63
+        ]
+      ]
+    },
+    {
+      "id": "west-in",
+      "osmWayId": 318391584,
+      "name": "Đường 10 Tháng 3 · nhánh phía tây",
+      "leg": "west",
+      "width": 10.5,
+      "oneway": true,
+      "points": [
+        [
+          -324.72,
+          -58.82
+        ],
+        [
+          -211.27,
+          -41.5
+        ],
+        [
+          -83.94,
+          -22.05
+        ],
+        [
+          -19.37,
+          -12.19
+        ],
+        [
+          -8.87,
+          -10.63
+        ]
+      ]
+    },
+    {
+      "id": "west-out",
+      "osmWayId": 1251057552,
+      "name": "Đường 10 Tháng 3 · nhánh phía tây",
+      "leg": "west",
+      "width": 10.5,
+      "oneway": true,
+      "points": [
+        [
+          -10.44,
+          9.52
+        ],
+        [
+          -22.39,
+          6.75
+        ],
+        [
+          -208.77,
+          -23.47
+        ],
+        [
+          -327.21,
+          -42.81
+        ]
+      ]
+    },
+    {
+      "id": "east-in",
+      "osmWayId": 318391582,
+      "name": "Đường 10 Tháng 3 · nhánh phía đông",
+      "leg": "east",
+      "width": 10.5,
+      "oneway": true,
+      "points": [
+        [
+          320.25,
+          79.63
+        ],
+        [
+          203.4,
+          54.56
+        ],
+        [
+          22.56,
+          15.28
+        ],
+        [
+          10.25,
+          12.58
+        ]
+      ]
+    },
+    {
+      "id": "east-out",
+      "osmWayId": 1251057550,
+      "name": "Đường 10 Tháng 3 · nhánh phía đông",
+      "leg": "east",
+      "width": 10.5,
+      "oneway": true,
+      "points": [
+        [
+          15.15,
+          -6.09
+        ],
+        [
+          27.03,
+          -3.41
+        ],
+        [
+          324.33,
+          60.92
+        ]
+      ]
+    }
+  ]
+}
